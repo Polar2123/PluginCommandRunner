@@ -8,8 +8,18 @@ import org.slf4j.LoggerFactory
 import com.google.common.io.ByteStreams
 import com.pokeskies.fabricpluginmessaging.PluginMessageEvent
 import commandScheduler.plugincommandrunner.configs.ConfigManager
+import it.unimi.dsi.fastutil.chars.CharSet
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking
 import net.minecraft.server.MinecraftServer
+import org.apache.commons.codec.digest.HmacAlgorithms
+import org.apache.commons.codec.digest.HmacUtils
+import java.security.MessageDigest
+import java.util.Base64
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
+import kotlin.math.abs
 
 class Plugincommandrunner : ModInitializer {
 
@@ -19,11 +29,9 @@ class Plugincommandrunner : ModInitializer {
     }
     val MAIN_MESSAGING_CHANNEL = "PluginCommandRunner"
     val SECONDARY_MESSAGING_CHANNEL: String = ConfigManager.config.server
-
-
+    var previous_id: Int = 0
 
     override fun onInitialize() {
-
         try {
             loadConfig()
             registerCommandRunner()
@@ -52,26 +60,49 @@ class Plugincommandrunner : ModInitializer {
     fun checkChannelMetaData(inputStream: ByteArrayDataInput, context: ServerPlayNetworking.Context){
 
         val channel = inputStream.readUTF()
-        LOGGER.info("current channel: $channel")
-        if (channel == MAIN_MESSAGING_CHANNEL) {
-            val currentServer = inputStream.readUTF()
-            LOGGER.info("current server: $currentServer")
-            if (currentServer == SECONDARY_MESSAGING_CHANNEL){
-                val server = context.server()
-                if (server != null){
+        val currentServer = inputStream.readUTF()
+        val command = inputStream.readUTF()
+        val id = inputStream.readInt()
+        val timestamp = inputStream.readLong()
+        val signature = inputStream.readUTF()
 
-                    val command = inputStream.readUTF()
-                    LOGGER.info("command to run: $command")
-                    executeCommand(server,command)
-
-                }
-                else{
-                    LOGGER.warn("Had problems getting the server instance.")
-                }
+        if (channel != MAIN_MESSAGING_CHANNEL) return
+        if (currentServer != SECONDARY_MESSAGING_CHANNEL) return
 
 
+        val now = Clock.System.now().epochSeconds
+        if (abs(now - timestamp) > 30) {
+            LOGGER.warn("Possibly fake plugin message detected.")
+            return
+        }
 
-            }
+        val mac = createMac()
+        val data = "$channel:$currentServer:$id:$command"
+        val raw = mac.doFinal(data.toByteArray(Charsets.UTF_8))
+
+        val encoded: String = Base64.getEncoder().encodeToString(raw)
+        if (encoded != signature){
+            LOGGER.warn("Invalid signature detected.")
+            return
+        }
+
+        if(id <= previous_id) return // Out of order ids, possibly duplicated message
+        previous_id = id
+
+
+
+
+
+        executeCommand(context.server(),command);
+    }
+    fun createMac(): Mac {
+        val secretKey = SecretKeySpec(
+            ConfigManager.config.secret.toByteArray(Charsets.UTF_8),
+            "HmacSHA256"
+        )
+
+        return Mac.getInstance("HmacSHA256").apply {
+            init(secretKey)
         }
     }
 
