@@ -8,18 +8,14 @@ import org.slf4j.LoggerFactory
 import com.google.common.io.ByteStreams
 import com.pokeskies.fabricpluginmessaging.PluginMessageEvent
 import commandScheduler.plugincommandrunner.configs.ConfigManager
-import it.unimi.dsi.fastutil.chars.CharSet
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking
 import net.minecraft.server.MinecraftServer
-import org.apache.commons.codec.digest.HmacAlgorithms
-import org.apache.commons.codec.digest.HmacUtils
-import java.security.MessageDigest
 import java.util.Base64
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import kotlin.math.abs
+import java.time.Clock as jtClock
 
 class Plugincommandrunner : ModInitializer {
 
@@ -28,12 +24,14 @@ class Plugincommandrunner : ModInitializer {
         val LOGGER: Logger = LoggerFactory.getLogger(MOD_ID)
     }
     val MAIN_MESSAGING_CHANNEL = "PluginCommandRunner"
-    val SECONDARY_MESSAGING_CHANNEL: String = ConfigManager.config.server
+    lateinit var SECONDARY_MESSAGING_CHANNEL: String
     var previous_id: Int = 0
 
     override fun onInitialize() {
         try {
             loadConfig()
+            SECONDARY_MESSAGING_CHANNEL = ConfigManager.config.server
+
             registerCommandRunner()
 
             LOGGER.info("PluginCommandRunner loaded correctly.")
@@ -44,8 +42,6 @@ class Plugincommandrunner : ModInitializer {
     }
 
     fun registerCommandRunner(){
-
-
         PluginMessageEvent.EVENT.register { payload, context ->
             LOGGER.info("Received something.");
             if (!payload.data.isEmpty()){
@@ -66,11 +62,16 @@ class Plugincommandrunner : ModInitializer {
         val timestamp = inputStream.readLong()
         val signature = inputStream.readUTF()
 
-        if (channel != MAIN_MESSAGING_CHANNEL) return
-        if (currentServer != SECONDARY_MESSAGING_CHANNEL) return
+        if (channel != MAIN_MESSAGING_CHANNEL) {
+            LOGGER.warn("Different Messaging Channel")
+            return;
+        }
+        if (currentServer != SECONDARY_MESSAGING_CHANNEL) {
+            LOGGER.warn("Different Server")
+            return;
+        }
 
-
-        val now = Clock.System.now().epochSeconds
+        val now = jtClock.systemUTC().instant().epochSecond
         if (abs(now - timestamp) > 30) {
             LOGGER.warn("Possibly fake plugin message detected.")
             return
