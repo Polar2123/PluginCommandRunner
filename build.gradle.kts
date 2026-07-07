@@ -1,3 +1,4 @@
+
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
@@ -5,6 +6,7 @@ plugins {
     kotlin("jvm") version "2.1.0"
     id("fabric-loom") version "1.10-SNAPSHOT"
     id("maven-publish")
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 version = project.property("mod_version") as String
@@ -41,14 +43,15 @@ fabricApi {
 }
 
 repositories {
-    mavenLocal()
+    maven {
+        url = uri("https://jitpack.io")
+    }
     // Add repositories to retrieve artifacts from in here.
     // You should only use this when depending on other mods because
     // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
     // See https://docs.gradle.org/current/userguide/declaring_repositories.html
     // for more information about repositories.
 }
-
 dependencies {
     // To change the versions see the gradle.properties file
     minecraft("com.mojang:minecraft:${project.property("minecraft_version")}")
@@ -57,8 +60,9 @@ dependencies {
     modImplementation("net.fabricmc:fabric-language-kotlin:${project.property("kotlin_loader_version")}")
 
     modImplementation("net.fabricmc.fabric-api:fabric-api:${project.property("fabric_version")}")
-    modImplementation("com.pokeskies.fabricpluginmessaging:FabricPluginMessaging:1.0.0")
-    include("com.pokeskies.fabricpluginmessaging:FabricPluginMessaging:1.0.0")
+
+    modImplementation("com.github.PokeSkies:FabricPluginMessaging:f621c4fcf6")
+    include("com.github.PokeSkies:FabricPluginMessaging:f621c4fcf6")
 
 }
 
